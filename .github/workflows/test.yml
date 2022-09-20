@@ -13,5 +13,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Run tests
+    - name: Run tests debug
       run: cargo test
+    - name: Run tests release
+      run: cargo test --release

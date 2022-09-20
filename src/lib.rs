@@ -1,5 +1,11 @@
-use std::{cell::RefCell, ops::{Deref, DerefMut}, sync::PoisonError, thread_local};
+//! This crate offers debug assertions for violations of lock hierarchies. No runtime overhead or
+//! protection occurs for release builds.
 
+#[cfg(debug_assertions)]
+use std::{cell::RefCell, thread_local};
+use std::{ops::{Deref, DerefMut}, sync::PoisonError};
+
+#[cfg(debug_assertions)]
 thread_local! {
     pub static LOCK_LEVELS: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 }
@@ -10,27 +16,30 @@ thread_local! {
 /// Each Mutex is assigned a level. Mutecies with higher levels must be acquired before mutices with
 /// lower levels.
 pub struct Mutex<T> {
+    #[cfg(debug_assertions)]
     level: u32,
     inner: std::sync::Mutex<T>,
 }
 
 impl<T> Mutex<T> {
-    /// Creates Mutex on level 0
+    /// Creates Mutex with level 0 (innermost Mutex)
     pub fn new(t: T) -> Self {
-        Mutex {
-            level: 0,
-            inner: std::sync::Mutex::new(t),
-        }
+        Self::with_level(t, 0)
     }
 
     pub fn with_level(t: T, level: u32) -> Self {
+        // Explicitly ignore level in release builds
+        #[cfg(not(debug_assertions))]
+        let _ = level;
         Mutex {
+            #[cfg(debug_assertions)]
             level,
             inner: std::sync::Mutex::new(t),
         }
     }
 
     pub fn lock(&self) -> Result<MutexGuard<T>, PoisonError<std::sync::MutexGuard<'_, T>>> {
+        #[cfg(debug_assertions)]
         LOCK_LEVELS.with(|levels| {
             let mut levels = levels.borrow_mut();
             if let Some(&lowest) = levels.last() {
@@ -39,6 +48,7 @@ impl<T> Mutex<T> {
             levels.push(self.level);
         });
         self.inner.lock().map(|guard| MutexGuard {
+            #[cfg(debug_assertions)]
             level: self.level,
             inner: guard,
         })
@@ -46,12 +56,14 @@ impl<T> Mutex<T> {
 }
 
 pub struct MutexGuard<'a, T> {
+    #[cfg(debug_assertions)]
     level: u32,
     inner: std::sync::MutexGuard<'a, T>,
 }
 
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
+        #[cfg(debug_assertions)]
         LOCK_LEVELS.with(|levels| {
             let mut levels = levels.borrow_mut();
             let index = levels
@@ -101,13 +113,25 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic]
     fn should_panic_if_two_mutices_with_level_0_are_acquired() {
+        let mutex_a = Mutex::new(()); // Level 0
+        let mutex_b = Mutex::new(()); // also level 0
+        // Fine, first mutex in thread
+        let _guard_a = mutex_a.lock().unwrap();
+        // Must panic, lock hierarchy violation
+        let _guard_b = mutex_b.lock().unwrap();
+    }
+
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn should_not_check_in_release_build() {
         let mutex_a = Mutex::new(5); // Level 0
         let mutex_b = Mutex::new(42); // also level 0
                                       // Fine, first mutex in thread
         let _guard_a = mutex_a.lock().unwrap();
-        // Must panic, lock hierarchy violation
+        // Lock hierarchy violation, but we do not panic, since debug assertions are not active
         let _guard_b = mutex_b.lock().unwrap();
     }
 

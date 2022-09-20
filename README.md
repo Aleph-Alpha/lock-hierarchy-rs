@@ -1,3 +1,3 @@
 # Lock hierarchy
 
-Enforce lock hierarchies in your Rust code.
+Prevent dead locks by enforcing lock hierarchies in your Rust code.

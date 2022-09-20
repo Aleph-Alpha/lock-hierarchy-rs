@@ -1,7 +1,20 @@
 [package]
 name = "lock-hierarchy"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/Aleph-Alpha/lock-hierarchy-rs"
+
+# A short blurb about the package. This is not rendered in any format when
+# uploaded to crates.io (aka this is not markdown).
+description = "Prevent dead locks by enforcing lock hierarchies"
+
+
+# This is a list of up to five categories where this crate would fit.
+# Categories are a fixed list available at crates.io/category_slugs, and
+# they must match exactly.
+categories = ["concurrency", "rust-patterns"]
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

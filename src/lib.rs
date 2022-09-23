@@ -7,26 +7,52 @@ use std::{ops::{Deref, DerefMut}, sync::PoisonError};
 
 #[cfg(debug_assertions)]
 thread_local! {
+    /// We hold a stack of thread local lock levels.
+    /// 
+    /// * Thread local: We want to trace the lock level for each native system thread. Also making it
+    ///   thread local implies that this needs no synchronization.
+    /// * Stack: Just holding the current lock level would be insufficient in situations there locks
+    ///   are released in a different order, from what they were acquired in. This way we can
+    ///   support scenarios like e.g.: Acquire A, Acquire B, Release A, Acquire C, ...
+    /// * RefCell: Static implies immutability in safe code, yet we want to mutate it. So we use a
+    ///   `RefCell` to acquire interiour mutability.
     pub static LOCK_LEVELS: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 }
 
 /// Wrapper around a [`std::sync::Mutex`] which uses a thread local variable in order to check for
-/// lock hierachy violations.
+/// lock hierachy violations in debug builds.
 ///
-/// Each Mutex is assigned a level. Mutecies with higher levels must be acquired before mutices with
+/// Each Mutex is assigned a level. Mutexes with higher levels must be acquired before mutexes  with
 /// lower levels.
+/// 
+/// ```
+/// use lock_hierarchy::Mutex;
+/// 
+/// let mutex_a = Mutex::new(()); // Level 0
+/// let mutex_b = Mutex::with_level((), 0); // also level 0
+/// // Fine, first mutex in thread
+/// let _guard_a = mutex_a.lock().unwrap();
+/// // Must panic, lock hierarchy violation
+/// let _guard_b = mutex_b.lock().unwrap();
+/// ```
 pub struct Mutex<T> {
+    /// Level of this mutex in the hierarchy. Higher levels must be acquired first if locks are to
+    /// be held simultaniously.
     #[cfg(debug_assertions)]
     level: u32,
     inner: std::sync::Mutex<T>,
 }
 
 impl<T> Mutex<T> {
-    /// Creates Mutex with level 0 (innermost Mutex)
+    /// Creates Mutex with level 0. Use this constructor if you want to get an error in debug builds
+    /// every time you acquire another mutex while holding this one.
     pub fn new(t: T) -> Self {
         Self::with_level(t, 0)
     }
 
+    /// Creates a mutex and assigns it a level in the lock hierarchy. Higher levels must be acquired
+    /// first if locks are to be held simultaniously. This way we can ensure locks are always
+    /// acquired in the same order. This prevents deadlocks.
     pub fn with_level(t: T, level: u32) -> Self {
         // Explicitly ignore level in release builds
         #[cfg(not(debug_assertions))]

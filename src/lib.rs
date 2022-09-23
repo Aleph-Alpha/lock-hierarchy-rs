@@ -32,8 +32,8 @@ thread_local! {
 /// let mutex_b = Mutex::with_level((), 0); // also level 0
 /// // Fine, first mutex in thread
 /// let _guard_a = mutex_a.lock().unwrap();
-/// // Must panic, lock hierarchy violation
-/// let _guard_b = mutex_b.lock().unwrap();
+/// // Would panic, lock hierarchy violation
+/// // let _guard_b = mutex_b.lock().unwrap();
 /// ```
 pub struct Mutex<T> {
     /// Level of this mutex in the hierarchy. Higher levels must be acquired first if locks are to

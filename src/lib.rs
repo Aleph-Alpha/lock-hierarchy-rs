@@ -16,7 +16,7 @@ thread_local! {
     ///   support scenarios like e.g.: Acquire A, Acquire B, Release A, Acquire C, ...
     /// * RefCell: Static implies immutability in safe code, yet we want to mutate it. So we use a
     ///   `RefCell` to acquire interiour mutability.
-    pub static LOCK_LEVELS: RefCell<Vec<u32>> = RefCell::new(Vec::new());
+    static LOCK_LEVELS: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 }
 
 /// Wrapper around a [`std::sync::Mutex`] which uses a thread local variable in order to check for

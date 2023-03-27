@@ -3,12 +3,15 @@
 
 #[cfg(debug_assertions)]
 use std::{cell::RefCell, thread_local};
-use std::{ops::{Deref, DerefMut}, sync::PoisonError};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::PoisonError,
+};
 
 #[cfg(debug_assertions)]
 thread_local! {
     /// We hold a stack of thread local lock levels.
-    /// 
+    ///
     /// * Thread local: We want to trace the lock level for each native system thread. Also making it
     ///   thread local implies that this needs no synchronization.
     /// * Stack: Just holding the current lock level would be insufficient in situations there locks
@@ -24,10 +27,10 @@ thread_local! {
 ///
 /// Each Mutex is assigned a level. Mutexes with higher levels must be acquired before mutexes  with
 /// lower levels.
-/// 
+///
 /// ```
 /// use lock_hierarchy::Mutex;
-/// 
+///
 /// let mutex_a = Mutex::new(()); // Level 0
 /// let mutex_b = Mutex::with_level((), 0); // also level 0
 /// // Fine, first mutex in thread
@@ -69,6 +72,14 @@ impl<T> Mutex<T> {
         LOCK_LEVELS.with(|levels| {
             let mut levels = levels.borrow_mut();
             if let Some(&lowest) = levels.last() {
+                if lowest <= self.level {
+                    panic!(
+                        "Tried to acquire lock to a mutex with level {}. Yet lock with level {} \
+                        had been acquired first. This is a violation of lock hierarchies which could
+                        lead to deadlocks.",
+                        self.level, lowest
+                    )
+                }
                 assert!(lowest > self.level)
             }
             levels.push(self.level);
@@ -110,9 +121,7 @@ impl<'a, T> Deref for MutexGuard<'a, T> {
 }
 
 impl<'a, T> DerefMut for MutexGuard<'a, T> {
-
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner.deref_mut()
     }
 }
-

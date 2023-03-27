@@ -25,7 +25,19 @@ fn should_allow_mutation() {
 fn should_panic_if_two_mutices_with_level_0_are_acquired() {
     let mutex_a = Mutex::new(()); // Level 0
     let mutex_b = Mutex::new(()); // also level 0
-                                  // Fine, first mutex in thread
+    // Fine, first mutex in thread
+    let _guard_a = mutex_a.lock().unwrap();
+    // Must panic, lock hierarchy violation
+    let _guard_b = mutex_b.lock().unwrap();
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic]
+fn should_panic_if_0_is_acquired_before_1() {
+    let mutex_a = Mutex::new(()); // Level 0
+    let mutex_b = Mutex::with_level((), 1); // Level 1
+    // Fine, first mutex in thread
     let _guard_a = mutex_a.lock().unwrap();
     // Must panic, lock hierarchy violation
     let _guard_b = mutex_b.lock().unwrap();

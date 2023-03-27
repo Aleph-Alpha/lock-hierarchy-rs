@@ -75,8 +75,8 @@ impl<T> Mutex<T> {
                 if lowest <= self.level {
                     panic!(
                         "Tried to acquire lock to a mutex with level {}. Yet lock with level {} \
-                        had been acquired first. This is a violation of lock hierarchies which could
-                        lead to deadlocks.",
+                        had been acquired first. This is a violation of lock hierarchies which \
+                        could lead to deadlocks.",
                         self.level, lowest
                     )
                 }

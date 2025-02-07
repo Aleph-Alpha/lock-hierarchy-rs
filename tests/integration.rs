@@ -1,4 +1,3 @@
-
 use lock_hierarchy::Mutex;
 
 #[test]

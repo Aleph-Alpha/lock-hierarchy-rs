@@ -38,6 +38,7 @@ thread_local! {
 /// // Would panic, lock hierarchy violation
 /// // let _guard_b = mutex_b.lock().unwrap();
 /// ```
+#[derive(Debug, Default)]
 pub struct Mutex<T> {
     /// Level of this mutex in the hierarchy. Higher levels must be acquired first if locks are to
     /// be held simultaniously.
@@ -89,6 +90,14 @@ impl<T> Mutex<T> {
             level: self.level,
             inner: guard,
         })
+    }
+}
+
+impl<T> From<T> for Mutex<T> {
+    /// Creates a new mutex in an unlocked state ready for use.
+    /// This is equivalent to [`Mutex::new`].
+    fn from(value: T) -> Self {
+        Mutex::new(value)
     }
 }
 

@@ -1,26 +1,15 @@
 //! This crate offers debug assertions for violations of lock hierarchies. No runtime overhead or
 //! protection occurs for release builds.
 
-#[cfg(debug_assertions)]
-use std::{cell::RefCell, thread_local};
+mod level;
+
+use std::sync::LockResult;
+
+use crate::level::{Level, LevelGuard};
 use std::{
     ops::{Deref, DerefMut},
     sync::PoisonError,
 };
-
-#[cfg(debug_assertions)]
-thread_local! {
-    /// We hold a stack of thread local lock levels.
-    ///
-    /// * Thread local: We want to trace the lock level for each native system thread. Also making it
-    ///   thread local implies that this needs no synchronization.
-    /// * Stack: Just holding the current lock level would be insufficient in situations there locks
-    ///   are released in a different order, from what they were acquired in. This way we can
-    ///   support scenarios like e.g.: Acquire A, Acquire B, Release A, Acquire C, ...
-    /// * RefCell: Static implies immutability in safe code, yet we want to mutate it. So we use a
-    ///   `RefCell` to acquire interiour mutability.
-    static LOCK_LEVELS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
-}
 
 /// Wrapper around a [`std::sync::Mutex`] which uses a thread local variable in order to check for
 /// lock hierachy violations in debug builds.
@@ -40,10 +29,7 @@ thread_local! {
 /// ```
 #[derive(Debug, Default)]
 pub struct Mutex<T> {
-    /// Level of this mutex in the hierarchy. Higher levels must be acquired first if locks are to
-    /// be held simultaniously.
-    #[cfg(debug_assertions)]
-    level: u32,
+    level: Level,
     inner: std::sync::Mutex<T>,
 }
 
@@ -58,37 +44,17 @@ impl<T> Mutex<T> {
     /// first if locks are to be held simultaniously. This way we can ensure locks are always
     /// acquired in the same order. This prevents deadlocks.
     pub fn with_level(t: T, level: u32) -> Self {
-        // Explicitly ignore level in release builds
-        #[cfg(not(debug_assertions))]
-        let _ = level;
         Mutex {
-            #[cfg(debug_assertions)]
-            level,
+            level: Level::new(level),
             inner: std::sync::Mutex::new(t),
         }
     }
 
+    /// See [std::sync::Mutex::lock]
     pub fn lock(&self) -> Result<MutexGuard<T>, PoisonError<std::sync::MutexGuard<'_, T>>> {
-        #[cfg(debug_assertions)]
-        LOCK_LEVELS.with(|levels| {
-            let mut levels = levels.borrow_mut();
-            if let Some(&lowest) = levels.last() {
-                if lowest <= self.level {
-                    panic!(
-                        "Tried to acquire lock to a mutex with level {}. Yet lock with level {} \
-                        had been acquired first. This is a violation of lock hierarchies which \
-                        could lead to deadlocks.",
-                        self.level, lowest
-                    )
-                }
-                assert!(lowest > self.level)
-            }
-            levels.push(self.level);
-        });
         self.inner.lock().map(|guard| MutexGuard {
-            #[cfg(debug_assertions)]
-            level: self.level,
             inner: guard,
+            _level: self.level.lock(),
         })
     }
 }
@@ -102,23 +68,8 @@ impl<T> From<T> for Mutex<T> {
 }
 
 pub struct MutexGuard<'a, T> {
-    #[cfg(debug_assertions)]
-    level: u32,
     inner: std::sync::MutexGuard<'a, T>,
-}
-
-impl<T> Drop for MutexGuard<'_, T> {
-    fn drop(&mut self) {
-        #[cfg(debug_assertions)]
-        LOCK_LEVELS.with(|levels| {
-            let mut levels = levels.borrow_mut();
-            let index = levels
-                .iter()
-                .rposition(|&level| level == self.level)
-                .expect("Position must exist, because we inserted it during lock!");
-            levels.remove(index);
-        });
-    }
+    _level: LevelGuard,
 }
 
 impl<T> Deref for MutexGuard<'_, T> {

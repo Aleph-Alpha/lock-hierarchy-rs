@@ -57,6 +57,12 @@ impl<T> Mutex<T> {
         // No need to check hierarchy, this does not lock
         self.inner.get_mut()
     }
+
+    /// See [std::sync::Mutex::into_inner]
+    pub fn into_inner(self) -> LockResult<T> {
+        // No need to check hierarchy, this does not lock
+        self.inner.into_inner()
+    }
 }
 
 impl<T> From<T> for Mutex<T> {

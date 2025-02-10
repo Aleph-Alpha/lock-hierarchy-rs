@@ -47,9 +47,10 @@ impl<T> RwLock<T> {
     pub fn read(
         &self,
     ) -> Result<RwLockReadGuard<T>, PoisonError<std::sync::RwLockReadGuard<'_, T>>> {
+        let level = self.level.lock();
         self.inner.read().map(|guard| RwLockReadGuard {
             inner: guard,
-            _level: self.level.lock(),
+            _level: level,
         })
     }
 
@@ -57,9 +58,10 @@ impl<T> RwLock<T> {
     pub fn write(
         &self,
     ) -> Result<RwLockWriteGuard<T>, PoisonError<std::sync::RwLockWriteGuard<'_, T>>> {
+        let level = self.level.lock();
         self.inner.write().map(|guard| RwLockWriteGuard {
             inner: guard,
-            _level: self.level.lock(),
+            _level: level,
         })
     }
 
@@ -113,5 +115,90 @@ impl<T> Deref for RwLockWriteGuard<'_, T> {
 impl<T> DerefMut for RwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner.deref_mut()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn acquire_resource() {
+        let mutex = RwLock::new(42);
+        let guard = mutex.read().unwrap();
+        assert_eq!(42, *guard);
+        drop(guard);
+
+        let guard = mutex.write().unwrap();
+        assert_eq!(42, *guard);
+        drop(guard);
+    }
+
+    #[test]
+    fn allow_mutation() {
+        let mutex = RwLock::new(42);
+        let mut guard = mutex.write().unwrap();
+
+        *guard = 43;
+
+        assert_eq!(43, *guard)
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Tried to acquire lock with level 0 while a lock with level 0 is acquired. This is a violation of lock hierarchies which could lead to deadlocks."
+    )]
+    #[cfg(debug_assertions)]
+    fn self_deadlock_write() {
+        // This ensures that the level is locked in RwLock::write before locking the std lock which might otherwise cause a deadlock
+        let mutex = RwLock::new(());
+        let _guard = mutex.read().unwrap();
+        let _guard = mutex.write().unwrap();
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Tried to acquire lock with level 0 while a lock with level 0 is acquired. This is a violation of lock hierarchies which could lead to deadlocks."
+    )]
+    #[cfg(debug_assertions)]
+    fn self_deadlock_read() {
+        // This ensures that the level is locked in RwLock::read before locking the std lock which might otherwise cause an unchecked deadlock
+        let mutex = RwLock::new(());
+        let _guard = mutex.read().unwrap();
+        let _guard = mutex.read().unwrap();
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn correct_level_locked() {
+        let mutex = RwLock::with_level((), 1);
+        let guard = mutex.read().unwrap();
+        assert_eq!(guard._level.level, 1);
+        drop(guard);
+        let guard = mutex.write().unwrap();
+        assert_eq!(guard._level.level, 1);
+        drop(guard);
+
+        let mutex = RwLock::new(());
+        let guard = mutex.read().unwrap();
+        assert_eq!(guard._level.level, 0);
+        drop(guard);
+        let guard = mutex.write().unwrap();
+        assert_eq!(guard._level.level, 0);
+        drop(guard);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn created_by_default_impl_should_be_level_0() {
+        let mutex = RwLock::<()>::default();
+        assert_eq!(mutex.level.level, 0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn mutex_created_by_from_impl_should_be_level_0() {
+        let mutex: RwLock<u8> = 42.into();
+        assert_eq!(mutex.level.level, 0);
     }
 }

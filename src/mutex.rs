@@ -91,3 +91,64 @@ impl<T> DerefMut for MutexGuard<'_, T> {
         self.inner.deref_mut()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn acquire_resource() {
+        let mutex = Mutex::new(42);
+        let guard = mutex.lock().unwrap();
+
+        assert_eq!(42, *guard)
+    }
+
+    #[test]
+    fn allow_mutation() {
+        let mutex = Mutex::new(42);
+        let mut guard = mutex.lock().unwrap();
+
+        *guard = 43;
+
+        assert_eq!(43, *guard)
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Tried to acquire lock with level 0 while a lock with level 0 is acquired. This is a violation of lock hierarchies which could lead to deadlocks."
+    )]
+    #[cfg(debug_assertions)]
+    fn self_deadlock() {
+        // This ensures that the level is locked in Mutex::lock before locking the std lock which might otherwise cause an unchecked deadlock
+        let mutex = Mutex::new(());
+        let _guard = mutex.lock().unwrap();
+        let _guard = mutex.lock().unwrap();
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn correct_level_locked() {
+        let mutex = Mutex::with_level((), 1);
+        let _guard_a = mutex.lock().unwrap();
+        assert_eq!(_guard_a._level.level, 1);
+
+        let mutex = Mutex::new(());
+        let _guard_a = mutex.lock().unwrap();
+        assert_eq!(_guard_a._level.level, 0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn created_by_default_impl_should_be_level_0() {
+        let mutex = Mutex::<()>::default();
+        assert_eq!(mutex.level.level, 0);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn mutex_created_by_from_impl_should_be_level_0() {
+        let mutex: Mutex<u8> = 42.into();
+        assert_eq!(mutex.level.level, 0);
+    }
+}

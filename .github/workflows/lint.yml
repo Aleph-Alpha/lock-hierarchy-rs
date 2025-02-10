@@ -2,9 +2,9 @@ name: Lint
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
@@ -12,8 +12,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Run clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
-    - name: Run rustfmt
-      run: cargo fmt --check
+      - uses: actions/checkout@v3
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run clippy
+        run: cargo clippy --release --all-targets --all-features -- -D warnings
+      - name: Run rustfmt
+        run: cargo fmt --check

@@ -57,6 +57,12 @@ impl<T> Mutex<T> {
             _level: self.level.lock(),
         })
     }
+
+    /// See [std::sync::Mutex::get_mut]
+    pub fn get_mut(&mut self) -> LockResult<&mut T> {
+        // No need to check hierarchy, this does not lock
+        self.inner.get_mut()
+    }
 }
 
 impl<T> From<T> for Mutex<T> {

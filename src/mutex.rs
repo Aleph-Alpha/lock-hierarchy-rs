@@ -1,10 +1,13 @@
 use std::{
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
-    sync::{LockResult, PoisonError},
+    sync::LockResult,
 };
 
-use crate::level::{Level, LevelGuard};
+use crate::{
+    level::{Level, LevelGuard},
+    map_guard,
+};
 
 /// Wrapper around a [`std::sync::Mutex`] which uses a thread local variable in order to check for
 /// lock hierarchy violations in debug builds.
@@ -45,9 +48,9 @@ impl<T> Mutex<T> {
     }
 
     /// See [std::sync::Mutex::lock]
-    pub fn lock(&self) -> Result<MutexGuard<T>, PoisonError<std::sync::MutexGuard<'_, T>>> {
+    pub fn lock(&self) -> LockResult<MutexGuard<T>> {
         let level = self.level.lock();
-        self.inner.lock().map(|guard| MutexGuard {
+        map_guard(self.inner.lock(), |guard| MutexGuard {
             inner: guard,
             _level: level,
         })
@@ -79,13 +82,13 @@ pub struct MutexGuard<'a, T> {
     _level: LevelGuard,
 }
 
-impl<'a, T: Debug> Debug for MutexGuard<'a, T> {
+impl<T: Debug> Debug for MutexGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(&self.inner, f)
     }
 }
 
-impl<'a, T: Display> Display for MutexGuard<'a, T> {
+impl<T: Display> Display for MutexGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.inner, f)
     }
@@ -137,6 +140,23 @@ mod tests {
         let mutex = Mutex::new(());
         let _guard = mutex.lock().unwrap();
         let _guard = mutex.lock().unwrap();
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Tried to acquire lock with level 0 while a lock with level 0 is acquired. This is a violation of lock hierarchies which could lead to deadlocks."
+    )]
+    #[cfg(debug_assertions)]
+    fn poisoned_lock() {
+        let mutex = Mutex::new(());
+        std::panic::catch_unwind(|| {
+            let _guard = mutex.lock();
+            panic!("lock is poisoned now");
+        })
+        .unwrap_err();
+
+        let _guard_a = mutex.lock().unwrap_err().into_inner();
+        let _guard_b = mutex.lock();
     }
 
     #[test]

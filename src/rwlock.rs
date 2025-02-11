@@ -1,10 +1,13 @@
 use std::{
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
-    sync::{LockResult, PoisonError},
+    sync::LockResult,
 };
 
-use crate::level::{Level, LevelGuard};
+use crate::{
+    level::{Level, LevelGuard},
+    map_guard,
+};
 
 /// Wrapper around a [`std::sync::RwLock`] which uses a thread local variable in order to check for
 /// lock hierarchy violations in debug builds.
@@ -45,22 +48,18 @@ impl<T> RwLock<T> {
     }
 
     /// See [std::sync::RwLock::read]
-    pub fn read(
-        &self,
-    ) -> Result<RwLockReadGuard<T>, PoisonError<std::sync::RwLockReadGuard<'_, T>>> {
+    pub fn read(&self) -> LockResult<RwLockReadGuard<T>> {
         let level = self.level.lock();
-        self.inner.read().map(|guard| RwLockReadGuard {
+        map_guard(self.inner.read(), |guard| RwLockReadGuard {
             inner: guard,
             _level: level,
         })
     }
 
     /// See [std::sync::RwLock::write]
-    pub fn write(
-        &self,
-    ) -> Result<RwLockWriteGuard<T>, PoisonError<std::sync::RwLockWriteGuard<'_, T>>> {
+    pub fn write(&self) -> LockResult<RwLockWriteGuard<T>> {
         let level = self.level.lock();
-        self.inner.write().map(|guard| RwLockWriteGuard {
+        map_guard(self.inner.write(), |guard| RwLockWriteGuard {
             inner: guard,
             _level: level,
         })
@@ -92,13 +91,13 @@ pub struct RwLockReadGuard<'a, T> {
     _level: LevelGuard,
 }
 
-impl<'a, T: Debug> Debug for RwLockReadGuard<'a, T> {
+impl<T: Debug> Debug for RwLockReadGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(&self.inner, f)
     }
 }
 
-impl<'a, T: Display> Display for RwLockReadGuard<'a, T> {
+impl<T: Display> Display for RwLockReadGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.inner, f)
     }
@@ -117,13 +116,13 @@ pub struct RwLockWriteGuard<'a, T> {
     _level: LevelGuard,
 }
 
-impl<'a, T: Debug> Debug for RwLockWriteGuard<'a, T> {
+impl<T: Debug> Debug for RwLockWriteGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(&self.inner, f)
     }
 }
 
-impl<'a, T: Display> Display for RwLockWriteGuard<'a, T> {
+impl<T: Display> Display for RwLockWriteGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.inner, f)
     }
@@ -167,6 +166,41 @@ mod tests {
         *guard = 43;
 
         assert_eq!(43, *guard)
+    }
+
+    #[cfg(debug_assertions)]
+    fn poisoned_lock() -> RwLock<()> {
+        let mutex = RwLock::new(());
+        std::panic::catch_unwind(|| {
+            let _guard = mutex.write();
+            panic!("lock is poisoned now");
+        })
+        .unwrap_err();
+        mutex
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Tried to acquire lock with level 0 while a lock with level 0 is acquired. This is a violation of lock hierarchies which could lead to deadlocks."
+    )]
+    #[cfg(debug_assertions)]
+    fn poisoned_read_lock() {
+        let mutex = poisoned_lock();
+
+        let _guard_a = mutex.read().unwrap_err().into_inner();
+        let _guard_b = mutex.read();
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Tried to acquire lock with level 0 while a lock with level 0 is acquired. This is a violation of lock hierarchies which could lead to deadlocks."
+    )]
+    #[cfg(debug_assertions)]
+    fn poisoned_write_lock() {
+        let mutex = poisoned_lock();
+
+        let _guard_a = mutex.write().unwrap_err().into_inner();
+        let _guard_b = mutex.write();
     }
 
     #[test]

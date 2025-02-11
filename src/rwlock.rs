@@ -1,4 +1,5 @@
 use std::{
+    fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
     sync::{LockResult, PoisonError},
 };
@@ -91,6 +92,18 @@ pub struct RwLockReadGuard<'a, T> {
     _level: LevelGuard,
 }
 
+impl<'a, T: Debug> Debug for RwLockReadGuard<'a, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.inner, f)
+    }
+}
+
+impl<'a, T: Display> Display for RwLockReadGuard<'a, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
+}
+
 impl<T> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
 
@@ -102,6 +115,18 @@ impl<T> Deref for RwLockReadGuard<'_, T> {
 pub struct RwLockWriteGuard<'a, T> {
     inner: std::sync::RwLockWriteGuard<'a, T>,
     _level: LevelGuard,
+}
+
+impl<'a, T: Debug> Debug for RwLockWriteGuard<'a, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.inner, f)
+    }
+}
+
+impl<'a, T: Display> Display for RwLockWriteGuard<'a, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
 }
 
 impl<T> Deref for RwLockWriteGuard<'_, T> {

@@ -110,6 +110,8 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 
 #[cfg(test)]
 mod tests {
+    use std::{hint::black_box, sync::Arc, thread};
+
     use super::*;
 
     #[test]
@@ -128,6 +130,19 @@ mod tests {
         *guard = 43;
 
         assert_eq!(43, *guard)
+    }
+
+    #[test]
+    fn multithreaded() {
+        let mutex = Arc::new(Mutex::new(()));
+        let thread = thread::spawn({
+            let mutex = mutex.clone();
+            move || {
+                black_box(mutex.lock().unwrap());
+            }
+        });
+        black_box(mutex.lock().unwrap());
+        thread.join().unwrap();
     }
 
     #[test]

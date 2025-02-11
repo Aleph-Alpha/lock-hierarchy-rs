@@ -1,4 +1,5 @@
 use std::{
+    fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
     sync::{LockResult, PoisonError},
 };
@@ -76,6 +77,18 @@ impl<T> From<T> for Mutex<T> {
 pub struct MutexGuard<'a, T> {
     inner: std::sync::MutexGuard<'a, T>,
     _level: LevelGuard,
+}
+
+impl<'a, T: Debug> Debug for MutexGuard<'a, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.inner, f)
+    }
+}
+
+impl<'a, T: Display> Display for MutexGuard<'a, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
 }
 
 impl<T> Deref for MutexGuard<'_, T> {

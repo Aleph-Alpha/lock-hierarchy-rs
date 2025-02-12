@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.0](https://github.com/Aleph-Alpha/lock-hierarchy-rs/compare/v0.1.3...v0.2.0) - 2025-02-12
+
+### Added
+
+- Remove escape hatch caused by returning the inner RwLock Guard on poisoned
+- Debug and Display for all Guards
+- Add RwLock
+- Add Mutex::get_mut
+
+### Other
+
+- Multithreaded tests
+- Unify tests
+- Mutex to separate module
+- Lock level mechanism to new struct
+- Run clippy also on the release profile
+- Gitignore
+
 ## [0.1.3](https://github.com/Aleph-Alpha/lock-hierarchy-rs/compare/v0.1.2...v0.1.3) - 2025-02-07
 
 ### Added
